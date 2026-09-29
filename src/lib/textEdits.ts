@@ -22,6 +22,7 @@ export function textSlots(template: TemplateId, key: string, el: HTMLElement): T
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
   while (walker.nextNode()) {
     const node = walker.currentNode as Text
+    if (node.parentElement?.closest('[data-rich-content]')) continue // 부분 서식으로 붙인 글자는 템플릿 문구가 아님
     const original = originalText(node)
     if (!original.trim()) continue
     seen[original] = (seen[original] ?? -1) + 1

@@ -74,6 +74,14 @@ export const templateLibrary: TemplateMeta[] = [
   { id:'empathy-map', name:'Empathy Map', category:'비교', description:'중심 인물의 말·생각·행동·감정을 4방향으로 정리', hint:'항목=SAYS|내용 4개 · 메모=인물', visual:'matrix' },
   { id:'csd-board', name:'CSD Board', category:'비교', description:'확실한 것·가정·의문을 3열 포스트잇으로 정리', hint:'항목=C|내용, S|내용, D|내용', visual:'cards' },
 
+  { id:'cover-newsletter', name:'Newsletter Cover', category:'표지', description:'강한 배경색 위 초대형 제목과 호수 표기의 뉴스레터형 표지', hint:'제목 2~3줄 · 상단 라벨=VOL · 메모=발행월 · 이미지(일러스트) 선택', visual:'hero' },
+  { id:'browser-columns', name:'Browser Columns', category:'정보', description:'브라우저 창 안에 챕터 칩·제목·아이콘 카드 2열을 배치', hint:'항목=카드 제목|설명 2개(최대 4) · 상단 라벨=챕터', visual:'browser' },
+  { id:'keyword-scatter', name:'Keyword Map', category:'정보', description:'크기가 다른 키워드 태그를 흩어 배치하고 핵심 키워드를 강조', hint:'항목=키워드 5~7개(첫 번째가 가장 크게) · 본문=하단 설명', visual:'browser' },
+  { id:'sticker-flow', name:'Sticker Flow', category:'프로세스', description:'스티커형 원 아이콘 단계와 아래 태그 목록으로 흐름을 표현', hint:'항목=단계명|태그1, 태그2 3개 · 상단 라벨=섹션명', visual:'flow' },
+  { id:'arc-steps', name:'Arc Steps', category:'프로세스', description:'반원 아크 안의 핵심 문장과 STEP 열별 불릿 정리', hint:'항목=단계 제목|내용1 / 내용2 3개 · 메모=아크 위 소제목', visual:'flow' },
+  { id:'step-detail', name:'Step Detail', category:'프로세스', description:'STEP 번호·큰 제목·설명 아래 확인 포인트 카드 3개', hint:'상단 라벨=STEP 01 · 메모=말풍선 · 항목=포인트|설명 3개', visual:'flow' },
+  { id:'before-after-list', name:'Before After List', category:'비교', description:'BEFORE·AFTER 박스를 위아래로 놓고 불릿으로 비교', hint:'항목=B|개선 전 내용, A|개선 후 내용 (표시 없으면 앞 절반=BEFORE)', visual:'compare' },
+
   { id:'save-card', name:'Save Summary', category:'마무리', description:'저장 유도형 핵심 요약과 하단 액션 바', hint:'항목=요약|설명 3~5개 · 메모=저장 문구', visual:'cta' },
 ]
 

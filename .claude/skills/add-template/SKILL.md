@@ -34,7 +34,11 @@ description: 사용자가 카드뉴스 캡처본(이미지)을 보내며 템플�
    - **최상위는 반드시 `<div className="layout 새이름-layout">`** — 레이아웃 편집·문구 수정이 `.layout` 직계 자식 기준으로 동작
    - 큰 덩어리(제목 묶음, 목록, 카드 그리드, 메모)는 `.layout` 의 **직계 자식**으로 두고, 반복 단위는 그 안의 자식으로 둔다 → 사용자가 클릭(덩어리)·더블클릭(항목)으로 따로 옮길 수 있다
    - 제목은 `withBreaks(page.title)` + `className={titleDensity(page.title)}`, 본문 긴 글은 `bodyDensity(page.body)` 사용. 표준 머리는 `<PageHead page={page}/>` 재사용
-   - 항목 개수는 `slice(0, N)` 으로 상한을 둔다 (넘치면 카드 밖으로 나감)
+   - **항목 늘리기 지원**: 반복 단위 컨테이너는 `<div className="x-list" {...grow(page.items.length, 기본개수)}>{page.items.slice(0, 최대개수)...}` 형태로 쓴다
+     - 기본개수 = 캡처 디자인의 개수(이하에서는 기존 모습 그대로), 최대개수 = 기본의 1.5~2배
+     - 넘치면 컨테이너에 `data-extended` 가 붙고, 카드 밖으로 넘치면 `fitExtended` 가 자동으로 줄인다
+     - 가로 칸 수가 고정된 그리드는 `grow(n, base, extraCols(n, base))` 로 열을 늘리고, 확장 상태 전용 CSS 는 `.x-list[data-extended] ...` 로 작성
+     - 아이콘·색 배열은 반드시 `arr[i % arr.length]` (항목이 배열보다 많으면 앱 전체가 멈춤)
    - 원고가 비었을 때의 기본 문구는 `page.note || '기본 문구'` 형태로 (사용자가 문구 수정 기능으로 바꿀 수 있음)
    - `switch (page.template)` 에 `case 'new-id': return <NewComponent page={page}/>` 추가 (project 가 필요하면 `project={project}`)
 4. **`src/styles.css`** — 파일 끝의 추가 템플릿 영역에 `/* 템플릿이름 */` 주석 + 한 줄 규칙 블록 추가

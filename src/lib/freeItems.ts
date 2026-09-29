@@ -38,7 +38,7 @@ export function readImage(file: File, max = 1080): Promise<{ src: string; w: num
 export function sanitizeFreeItems(value: unknown): FreeItem[] | undefined {
   if (!Array.isArray(value)) return undefined
   const items = value.filter((v): v is FreeItem =>
-    v && typeof v.id === 'string' && (v.kind === 'image' || v.kind === 'text') &&
+    v && typeof v.id === 'string' && ['image', 'text', 'shape', 'icon'].includes(v.kind) &&
     [v.x, v.y, v.w].every(Number.isFinite))
   return items.length ? items : undefined
 }

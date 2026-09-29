@@ -1,17 +1,21 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { toPng } from 'html-to-image'
+import { toJpeg, toPng } from 'html-to-image'
 import JSZip from 'jszip'
 import { saveAs } from 'file-saver'
 import {
-  ArrowDown, ArrowUp, Copy, Download, FileJson, ImagePlus, LayoutGrid, LayoutTemplate,
-  Move, Plus, Redo2, RefreshCcw, RotateCcw, Search, Sparkles, Trash2, Type, Undo2, Upload, WandSparkles, X
+  ArrowDown, ArrowUp, Columns2, Copy, Download, FileJson, FileText, ImagePlus, LayoutGrid, LayoutTemplate,
+  Move, Plus, Redo2, RefreshCcw, RotateCcw, Search, Shapes, Sparkles, Trash2, Type, Undo2, Upload, WandSparkles, X
 } from 'lucide-react'
+import { AlignDir } from './components/AlignBar'
 import { CardCanvas } from './components/CardCanvas'
 import { ElementPanel } from './components/ElementPanel'
+import { ElementsPicker } from './components/ElementsPicker'
 import { FreeItemPanel } from './components/FreeItemPanel'
 import { LayoutEditor } from './components/LayoutEditor'
+import { PageThumb } from './components/PageThumb'
+import { SourcePane } from './components/SourcePane'
 import { sampleProject } from './data'
-import { activeEdits, sanitizeEdits } from './lib/layoutEdits'
+import { activeEdits, layoutOf, resolveKey, sanitizeEdits, visualBox, withEdit } from './lib/layoutEdits'
 import { sanitizeTextEdits } from './lib/textEdits'
 import { FREE_PREFIX, freeIdOf, readImage, sanitizeFreeItems } from './lib/freeItems'
 import { autoDesignPages, detectLogoCommand, splitScriptToPages, stripLogoCommands } from './lib/auto'
@@ -63,8 +67,16 @@ export default function App() {
   const [category, setCategory] = useState<TemplateCategory | '전체'>('전체')
   const [templateQuery, setTemplateQuery] = useState('')
   const [isLayoutEditing, setIsLayoutEditing] = useState(false)
+  /** 분할 보기: 왼쪽 작업 페이지 + 오른쪽 가져올 페이지 */
+  const [isSplit, setIsSplit] = useState(false)
   const [editKey, setEditKey] = useState<string | null>(null)
   const jsonInputRef = useRef<HTMLInputElement>(null)
+  const [isElementsOpen, setIsElementsOpen] = useState(false)
+  // 페이지 목록 끌어서 순서 바꾸기: 잡은 페이지와 놓을 자리
+  const [dragFrom, setDragFrom] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+  /** Ctrl+C 로 복사해 둔 추가 요소 (다른 페이지에도 붙여넣을 수 있다) */
+  const copiedFree = useRef<FreeItem | null>(null)
 
   // 이미지가 많으면 localStorage 한도(보통 5MB)를 넘을 수 있다. 앱이 멈추지 않게 잡고 화면에 알린다
   const [isSaveFailed, setIsSaveFailed] = useState(false)
@@ -112,11 +124,24 @@ export default function App() {
   // Ctrl+Z 되돌리기, Ctrl+Shift+Z / Ctrl+Y 다시 실행 (입력칸 안에서도 앱 전체 기준으로 동작)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // 선택한 추가 박스 삭제 (입력칸에서 글자를 지울 때는 제외)
-      const isTyping = e.target instanceof HTMLElement && e.target.matches('input, textarea, select')
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFreeId && !isTyping) { e.preventDefault(); removeFree(selectedFreeId); return }
+      // 선택한 요소 삭제 (입력칸에서 글자를 지울 때는 제외)
+      // 글자 입력 중이면 단축키(삭제·방향키·복사/붙여넣기)는 브라우저 기본 동작에 맡긴다. 부분 서식 편집기(contentEditable)도 포함
+      const isTyping = e.target instanceof HTMLElement && (e.target.matches('input, textarea, select') || e.target.isContentEditable)
+      if ((e.key === 'Delete' || e.key === 'Backspace') && isLayoutEditing && editKey && !isTyping) { e.preventDefault(); deleteSelected(); return }
+      // 방향키: 선택한 요소 1px (Shift 10px) 이동
+      const arrow = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[e.key]
+      if (arrow && isLayoutEditing && editKey && !isTyping) {
+        e.preventDefault()
+        const step = e.shiftKey ? 10 : 1
+        moveSelected(arrow[0] * step, arrow[1] * step)
+        return
+      }
       if (!(e.ctrlKey || e.metaKey)) return
       const k = e.key.toLowerCase()
+      // 추가 요소 복사·붙여넣기·복제 (입력칸 안에서는 브라우저 기본 동작)
+      if (!isTyping && k === 'c' && selectedFree) { copiedFree.current = selectedFree; return }
+      if (!isTyping && k === 'v' && copiedFree.current) { e.preventDefault(); copiedFree.current = pasteFree(copiedFree.current); return }
+      if (!isTyping && k === 'd' && selectedFree) { e.preventDefault(); pasteFree(selectedFree); return }
       if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
       else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
     }
@@ -125,7 +150,7 @@ export default function App() {
   })
 
   const page = project.pages[selected]
-  const canvasScale = project.aspect === '1:1' ? 0.58 : 0.47
+  const canvasScale = isSplit ? (project.aspect === '1:1' ? 0.38 : 0.34) : project.aspect === '1:1' ? 0.58 : 0.47
   const previewSize = useMemo(() => project.aspect === '1:1' ? {w:1080,h:1080}:{w:1080,h:1350}, [project.aspect])
   const currentTemplate = page ? templateMap[page.template] : templateMap.editorial
   const filteredTemplates = templateLibrary.filter(t => {
@@ -174,6 +199,17 @@ export default function App() {
       return { ...prev, pages }
     })
     setSelected(nextIndex)
+  }
+
+  /** 페이지를 from 자리에서 to 자리로 옮긴다. 보고 있던 페이지는 계속 선택된 채로 둔다 */
+  const reorderPage = (from: number, to: number) => {
+    if (from === to) return
+    const pages = [...project.pages]
+    const [moved] = pages.splice(from, 1)
+    pages.splice(to, 0, moved)
+    const selectedId = project.pages[selected]?.id
+    setProject(prev => ({ ...prev, pages }))
+    setSelected(Math.max(0, pages.findIndex(pg => pg.id === selectedId)))
   }
 
   const uploadImage = (e: ChangeEvent<HTMLInputElement>) => {
@@ -229,6 +265,73 @@ export default function App() {
     setEditKey(null)
   }
 
+  /** 선택한 요소 삭제: 추가 요소는 지우고, 템플릿 요소는 숨김으로 저장한다 (되살리기·Ctrl+Z 가능) */
+  const deleteSelected = () => {
+    if (!editKey) return
+    if (selectedFreeId) return removeFree(selectedFreeId)
+    updatePage({ layoutEdits: withEdit(page, project.aspect, editKey, { hide: true }) })
+    setEditKey(null)
+  }
+
+  /** 이 페이지(현재 템플릿·규격)에서 숨긴 템플릿 요소 */
+  const hiddenKeys = page ? Object.entries(activeEdits(page, project.aspect)).filter(([, e]) => e.hide).map(([k]) => k) : []
+
+  const restoreHidden = () => {
+    let next = page
+    for (const key of hiddenKeys) next = { ...next, layoutEdits: withEdit(next, project.aspect, key, { hide: false }) }
+    updatePage({ layoutEdits: next.layoutEdits })
+  }
+
+  /** 카드 가운데에 놓는다 */
+  const centered = (w: number, h: number) => ({ x: Math.round((1080 - w) / 2), y: Math.round((previewSize.h - h) / 2) })
+
+  const addShape = (shape: NonNullable<FreeItem['shape']>) => {
+    const [w, h] = shape === 'line' ? [480, 8] : shape === 'ellipse' ? [260, 260] : [340, 220]
+    addFree({ id: crypto.randomUUID(), kind: 'shape', shape, w, h, ...centered(w, h) })
+    setIsElementsOpen(false)
+  }
+
+  const addIcon = (name: string) => {
+    addFree({ id: crypto.randomUUID(), kind: 'icon', icon: name, w: 160, h: 160, ...centered(160, 160) })
+    setIsElementsOpen(false)
+  }
+
+  /** 추가 요소를 살짝 비껴서 현재 페이지에 하나 더 만든다. 만든 요소를 돌려줘 연속 붙여넣기 때 계속 비껴가게 한다 */
+  const pasteFree = (item: FreeItem) => {
+    const copy = { ...item, id: crypto.randomUUID(), x: item.x + 24, y: item.y + 24 }
+    addFree(copy)
+    return copy
+  }
+
+  /** 선택한 요소를 옮긴다 (1080 기준 px): 추가 요소는 좌표를, 템플릿 요소는 위치 조정값을 바꾼다 */
+  const moveSelected = (dx: number, dy: number) => {
+    if (!editKey) return
+    const key = editKey
+    const freeId = selectedFreeId
+    // 방향키를 누르고 있으면 렌더 사이에 여러 번 불릴 수 있어, 항상 최신 상태(prev)를 기준으로 더한다
+    setProject(prev => ({ ...prev, pages: prev.pages.map((p, i) => {
+      if (i !== selected) return p
+      if (freeId) return { ...p, freeItems: p.freeItems?.map(it => it.id === freeId ? { ...it, x: Math.round(it.x + dx), y: Math.round(it.y + dy) } : it) }
+      const cur = activeEdits(p, prev.aspect)[key] ?? { x: 0, y: 0, s: 1 }
+      return { ...p, layoutEdits: withEdit(p, prev.aspect, key, { x: cur.x + dx, y: cur.y + dy }) }
+    }) }))
+  }
+
+  /** 선택한 요소를 카드 가장자리·가운데에 맞춘다 (지금 보이는 박스 기준) */
+  const alignSelected = (dir: AlignDir) => {
+    const canvas = document.getElementById('card-preview')
+    const layout = layoutOf(canvas)
+    if (!canvas || !editKey) return
+    const el = selectedFreeId ? canvas.querySelector(`[data-free-id="${selectedFreeId}"]`) : layout && resolveKey(layout, editKey)
+    if (!el) return
+    const b = visualBox(el, canvas)
+    const W = canvas.offsetWidth
+    const H = canvas.offsetHeight
+    const dx = dir === 'left' ? -b.x : dir === 'hcenter' ? (W - b.w) / 2 - b.x : dir === 'right' ? W - b.w - b.x : 0
+    const dy = dir === 'top' ? -b.y : dir === 'vcenter' ? (H - b.h) / 2 - b.y : dir === 'bottom' ? H - b.h - b.y : 0
+    moveSelected(dx, dy)
+  }
+
   const exportOne = async () => {
     const node = document.getElementById('card-preview')
     if (!node) return
@@ -240,28 +343,50 @@ export default function App() {
     } finally { setBusy(false) }
   }
 
+  /** 모든 페이지를 화면 밖에 1080 기준 원래 크기로 그려 하나씩 캡처한다 (ZIP·PDF 공용) */
+  const capturePages = async (capture: (node: HTMLElement) => Promise<string>) => {
+    const urls: string[] = []
+    const { createRoot } = await import('react-dom/client')
+    for (let i = 0; i < project.pages.length; i++) {
+      const host = document.createElement('div')
+      host.style.position='fixed'; host.style.left='-99999px'; host.style.top='0'; host.style.zIndex='-1'
+      document.body.appendChild(host)
+      const target = document.createElement('div')
+      host.appendChild(target)
+      const root = createRoot(target)
+      root.render(<CardCanvas project={project} page={project.pages[i]} pageIndex={i} exportId={`export-${i}`} />)
+      await new Promise(r => setTimeout(r, 140))
+      await document.fonts?.ready
+      const node = document.getElementById(`export-${i}`)
+      if (node) urls.push(await capture(node))
+      root.unmount(); host.remove()
+    }
+    return urls
+  }
+
+  const exportPdf = async () => {
+    setBusy(true)
+    try {
+      // JPEG 로 넣어 파일 크기를 줄인다 (PNG 대비 약 1/5). 페이지 크기 = 카드 크기(1080px 기준)
+      const urls = await capturePages(node => toJpeg(node, { cacheBust: true, pixelRatio: 1, quality: 0.92, backgroundColor: getComputedStyle(node).backgroundColor }))
+      const { jsPDF } = await import('jspdf')
+      const [w, h] = project.aspect === '1:1' ? [1080, 1080] : [1080, 1350]
+      const pdf = new jsPDF({ unit: 'px', format: [w, h], orientation: 'portrait', hotfixes: ['px_scaling'], compress: true })
+      urls.forEach((url, i) => {
+        if (i) pdf.addPage([w, h], 'portrait')
+        pdf.addImage(url, 'JPEG', 0, 0, w, h)
+      })
+      pdf.save(`${project.issueLabel}.pdf`)
+    } catch { alert('PDF 를 만들지 못했습니다. 다시 시도해주세요.') }
+    finally { setBusy(false) }
+  }
+
   const exportAll = async () => {
     setBusy(true)
     try {
       const zip = new JSZip()
-      for (let i = 0; i < project.pages.length; i++) {
-        const host = document.createElement('div')
-        host.style.position='fixed'; host.style.left='-99999px'; host.style.top='0'; host.style.zIndex='-1'
-        document.body.appendChild(host)
-        const target = document.createElement('div')
-        host.appendChild(target)
-        const { createRoot } = await import('react-dom/client')
-        const root = createRoot(target)
-        root.render(<CardCanvas project={project} page={project.pages[i]} pageIndex={i} exportId={`export-${i}`} />)
-        await new Promise(r => setTimeout(r, 140))
-        await document.fonts?.ready
-        const node = document.getElementById(`export-${i}`)
-        if (node) {
-          const dataUrl = await toPng(node, { cacheBust: true, pixelRatio: 1, backgroundColor: getComputedStyle(node).backgroundColor })
-          zip.file(`${String(i+1).padStart(2,'0')}.png`, dataUrl.split(',')[1], { base64:true })
-        }
-        root.unmount(); host.remove()
-      }
+      const urls = await capturePages(node => toPng(node, { cacheBust: true, pixelRatio: 1, backgroundColor: getComputedStyle(node).backgroundColor }))
+      urls.forEach((url, i) => zip.file(`${String(i+1).padStart(2,'0')}.png`, url.split(',')[1], { base64:true }))
       const blob = await zip.generateAsync({ type:'blob' })
       saveAs(blob, `${project.issueLabel}_전체.zip`)
     } finally { setBusy(false) }
@@ -312,6 +437,7 @@ export default function App() {
         <button onClick={exportJson}><FileJson size={17}/> 저장</button>
         <button onClick={() => jsonInputRef.current?.click()}><Upload size={17}/> 불러오기</button>
         <input ref={jsonInputRef} type="file" accept="application/json" hidden onChange={importJson}/>
+        <button onClick={exportPdf} disabled={busy} title="모든 페이지를 PDF 한 파일로 저장"><FileText size={17}/> PDF</button>
         <button className="primary" onClick={exportAll} disabled={busy}><Download size={17}/> {busy ? '렌더링 중…' : '전체 ZIP'}</button>
       </div>
     </header>
@@ -356,8 +482,15 @@ export default function App() {
         </section>
 
         <section className="page-list-section">
-          <div className="section-head"><h3>페이지 {project.pages.length}</h3><button className="icon-btn" onClick={addPage}><Plus size={17}/></button></div>
-          <div className="page-list">{project.pages.map((p,i)=><button key={p.id} className={`page-row ${i===selected?'active':''}`} onClick={()=>setSelected(i)}><span className="page-index">{String(i+1).padStart(2,'0')}</span><div><b>{p.title.split('\n')[0]||'제목 없음'}</b><small>{templateMap[p.template]?.name || p.template}</small></div></button>)}</div>
+          <div className="section-head"><h3>페이지 {project.pages.length} <span className="hint">끌어서 순서 변경</span></h3><button className="icon-btn" onClick={addPage}><Plus size={17}/></button></div>
+          <div className="page-list">{project.pages.map((p,i)=><button key={p.id} draggable
+            className={`page-row ${i===selected?'active':''} ${dragFrom!==null && dragOver===i && dragFrom!==i ? (dragFrom<i ? 'drop-after' : 'drop-before') : ''} ${dragFrom===i ? 'is-dragging' : ''}`}
+            onClick={()=>setSelected(i)}
+            onDragStart={e=>{ setDragFrom(i); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(i)) }}
+            onDragOver={e=>{ e.preventDefault(); if (dragOver!==i) setDragOver(i) }}
+            onDrop={e=>{ e.preventDefault(); if (dragFrom!==null) reorderPage(dragFrom, i); setDragFrom(null); setDragOver(null) }}
+            onDragEnd={()=>{ setDragFrom(null); setDragOver(null) }}>
+            <span className="page-index">{String(i+1).padStart(2,'0')}</span><PageThumb project={project} page={p} pageIndex={i}/><div><b>{p.title.split('\n')[0]||'제목 없음'}</b><small>{templateMap[p.template]?.name || p.template}</small></div></button>)}</div>
         </section>
       </aside>
 
@@ -369,16 +502,26 @@ export default function App() {
           <button onClick={removePage} disabled={project.pages.length<=1}><Trash2 size={16}/></button>
           <button onClick={addText} title="텍스트 박스 추가"><Type size={16}/> 텍스트</button>
           <label className="toolbar-file" title="이미지 추가"><ImagePlus size={16}/> 이미지<input type="file" accept="image/*" hidden onChange={addImage}/></label>
+          <span className="toolbar-pop"><button className={isElementsOpen?'active':''} onClick={()=>setIsElementsOpen(v=>!v)} title="도형·아이콘 추가"><Shapes size={16}/> 요소</button>
+            {isElementsOpen && <ElementsPicker onAddShape={addShape} onAddIcon={addIcon} onClose={()=>setIsElementsOpen(false)}/>}</span>
+          <button className={isSplit?'active':''} onClick={()=>setIsSplit(v=>!v)} title="다른 템플릿·페이지를 옆에 띄워 요소 가져오기"><Columns2 size={16}/> 분할</button>
           <button className={isLayoutEditing?'active':''} onClick={()=>{ setIsLayoutEditing(v=>!v); setEditKey(null) }} title="요소를 끌어 옮기고 모서리로 크기 조절"><Move size={16}/> 레이아웃 편집</button>
           <button onClick={()=>updatePage({ layoutEdits: undefined, textEdits: undefined })} disabled={!Object.keys(activeEdits(page, project.aspect)).length && !page.textEdits}><RotateCcw size={16}/> 원래대로</button>
           <button className="primary" onClick={exportOne} disabled={busy}><Download size={16}/> PNG</button>
         </div></div>
-        <div className="canvas-stage" style={{height:previewSize.h*canvasScale+42}}><div className="scaled-canvas" style={{transform:`scale(${canvasScale})`,width:previewSize.w,height:previewSize.h}}><CardCanvas project={project} page={page} pageIndex={selected} exportId="card-preview"/>{isLayoutEditing && <LayoutEditor canvasId="card-preview" page={page} aspect={project.aspect} scale={canvasScale} selectedKey={editKey} onSelect={setEditKey} onChange={edits=>updatePage({ layoutEdits: edits })} onFreeChange={updateFree}/>}</div></div>
+        {isSplit
+          ? <div className="split-stage">
+            <div className="work-pane"><div className="source-head"><span>작업 페이지</span><b>{String(selected+1).padStart(2,'0')} · {currentTemplate.name}</b></div>
+              <div className="stage-pane" style={{width:previewSize.w*canvasScale,height:previewSize.h*canvasScale}}><div className="scaled-canvas is-left" style={{transform:`scale(${canvasScale})`,width:previewSize.w,height:previewSize.h}}><CardCanvas project={project} page={page} pageIndex={selected} exportId="card-preview"/>{isLayoutEditing && <LayoutEditor canvasId="card-preview" page={page} aspect={project.aspect} scale={canvasScale} selectedKey={editKey} onSelect={setEditKey} onChange={edits=>updatePage({ layoutEdits: edits })} onFreeChange={updateFree}/>}</div></div></div>
+            <SourcePane project={project} page={page} scale={canvasScale} onInsert={addFree}/>
+          </div>
+          : <div className="canvas-stage" style={{height:previewSize.h*canvasScale+42}}><div className="scaled-canvas" style={{transform:`scale(${canvasScale})`,width:previewSize.w,height:previewSize.h}}><CardCanvas project={project} page={page} pageIndex={selected} exportId="card-preview"/>{isLayoutEditing && <LayoutEditor canvasId="card-preview" page={page} aspect={project.aspect} scale={canvasScale} selectedKey={editKey} onSelect={setEditKey} onChange={edits=>updatePage({ layoutEdits: edits })} onFreeChange={updateFree}/>}</div></div>}
       </section>
 
       <aside className="sidebar edit-panel">
-        {selectedFree && <FreeItemPanel item={selectedFree} themeText={themes[project.theme].text} onChange={patch=>updateFree(selectedFree.id, patch)} onOrder={dir=>orderFree(selectedFree.id, dir)} onDelete={()=>removeFree(selectedFree.id)}/>}
-        {isLayoutEditing && editKey && !selectedFreeId && <ElementPanel canvasId="card-preview" page={page} aspect={project.aspect} elementKey={editKey} onSelect={setEditKey} onChange={updatePage}/>}
+        {hiddenKeys.length > 0 && <div className="hidden-bar"><span>삭제한 템플릿 요소 {hiddenKeys.length}개</span><button onClick={restoreHidden}><RotateCcw size={14}/> 모두 되살리기</button></div>}
+        {selectedFree && <FreeItemPanel item={selectedFree} themeText={themes[project.theme].text} themeAccent={themes[project.theme].accent} onChange={patch=>updateFree(selectedFree.id, patch)} onAlign={alignSelected} onDuplicate={()=>pasteFree(selectedFree)} onOrder={dir=>orderFree(selectedFree.id, dir)} onDelete={()=>removeFree(selectedFree.id)}/>}
+        {isLayoutEditing && editKey && !selectedFreeId && <ElementPanel canvasId="card-preview" page={page} aspect={project.aspect} elementKey={editKey} onSelect={setEditKey} onChange={updatePage} onAlign={alignSelected} onDelete={deleteSelected}/>}
         <section>
           <div className="section-head"><h3>페이지 편집</h3><span className="badge">{selected+1}/{project.pages.length}</span></div>
           <button className="template-selector" onClick={()=>setGalleryOpen(true)}><TemplateMini meta={currentTemplate} active/><div><small>{currentTemplate.category}</small><b>{currentTemplate.name}</b><span>{currentTemplate.description}</span></div><LayoutGrid size={19}/></button>

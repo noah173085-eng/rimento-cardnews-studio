@@ -1,4 +1,4 @@
-# Rimento Template Guide (50)
+# Rimento Template Guide (57)
 
 > 이 파일은 `npm run check:templates` 가 src/templateLibrary.ts 에서 자동 생성합니다. 직접 수정하지 마세요.
 > 새 템플릿 추가 절차: .claude/skills/add-template/SKILL.md
@@ -56,4 +56,11 @@
 | 47 | swimlane | Role Swimlane | 프로세스 | 역할별 레인에 단계를 배치한 협업 프로세스 | 항목=역할\|단계1>단계2>단계3 |
 | 48 | empathy-map | Empathy Map | 비교 | 중심 인물의 말·생각·행동·감정을 4방향으로 정리 | 항목=SAYS\|내용 4개 · 메모=인물 |
 | 49 | csd-board | CSD Board | 비교 | 확실한 것·가정·의문을 3열 포스트잇으로 정리 | 항목=C\|내용, S\|내용, D\|내용 |
-| 50 | save-card | Save Summary | 마무리 | 저장 유도형 핵심 요약과 하단 액션 바 | 항목=요약\|설명 3~5개 · 메모=저장 문구 |
+| 50 | cover-newsletter | Newsletter Cover | 표지 | 강한 배경색 위 초대형 제목과 호수 표기의 뉴스레터형 표지 | 제목 2~3줄 · 상단 라벨=VOL · 메모=발행월 · 이미지(일러스트) 선택 |
+| 51 | browser-columns | Browser Columns | 정보 | 브라우저 창 안에 챕터 칩·제목·아이콘 카드 2열을 배치 | 항목=카드 제목\|설명 2개(최대 4) · 상단 라벨=챕터 |
+| 52 | keyword-scatter | Keyword Map | 정보 | 크기가 다른 키워드 태그를 흩어 배치하고 핵심 키워드를 강조 | 항목=키워드 5~7개(첫 번째가 가장 크게) · 본문=하단 설명 |
+| 53 | sticker-flow | Sticker Flow | 프로세스 | 스티커형 원 아이콘 단계와 아래 태그 목록으로 흐름을 표현 | 항목=단계명\|태그1, 태그2 3개 · 상단 라벨=섹션명 |
+| 54 | arc-steps | Arc Steps | 프로세스 | 반원 아크 안의 핵심 문장과 STEP 열별 불릿 정리 | 항목=단계 제목\|내용1 / 내용2 3개 · 메모=아크 위 소제목 |
+| 55 | step-detail | Step Detail | 프로세스 | STEP 번호·큰 제목·설명 아래 확인 포인트 카드 3개 | 상단 라벨=STEP 01 · 메모=말풍선 · 항목=포인트\|설명 3개 |
+| 56 | before-after-list | Before After List | 비교 | BEFORE·AFTER 박스를 위아래로 놓고 불릿으로 비교 | 항목=B\|개선 전 내용, A\|개선 후 내용 (표시 없으면 앞 절반=BEFORE) |
+| 57 | save-card | Save Summary | 마무리 | 저장 유도형 핵심 요약과 하단 액션 바 | 항목=요약\|설명 3~5개 · 메모=저장 문구 |
