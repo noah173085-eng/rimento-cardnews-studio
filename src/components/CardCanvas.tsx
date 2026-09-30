@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef } from 'react'
 import {
-  ArrowDown, ArrowRight, ArrowUpRight, Bookmark, Briefcase, CalendarCheck, Check, ChevronDown, ChevronLeft, ChevronRight,
+  ArrowDown, ArrowRight, ArrowUpRight, Award, Bookmark, Briefcase, CalendarCheck, ChartColumn, Check, CircleHelp, FileText, Rocket, Settings, Sprout, ChevronDown, ChevronLeft, ChevronRight,
   CircleCheck, Compass, Gauge, Globe, Heart, Laptop, Lightbulb, Mail, MessageCircle, MoreHorizontal, MousePointer2, Paperclip,
   Phone, PhoneCall, Quote, RotateCw, Search, Send, Sparkles, SquarePen, Star, Target, TrendingUp, UserRound, Users
 } from 'lucide-react'
@@ -55,7 +55,7 @@ const titleDensity = (title: string) => {
  * data-extended 가 붙은 컨테이너는 카드 밖으로 넘치면 fitExtended(layoutEdits.ts)가 줄여서 맞춘다.
  */
 const grow = (count: number, base: number, style?: React.CSSProperties) =>
-  count > base ? { 'data-extended': count, style } : {}
+  count > base ? { 'data-extended': count, 'data-grow': '', style } : { 'data-grow': '' }
 
 /** 가로 칸 수가 고정된 그리드가 넘칠 때: 4열까지는 열을 늘리고, 그 이상은 원래 열 수(2열은 3열)로 줄바꿈 */
 const extraCols = (count: number, base: number): React.CSSProperties =>
@@ -258,13 +258,14 @@ function Stats({ page }: { page: CardPage }) {
 
 function StatFocus({ page }: { page: CardPage }) {
   const [value,label] = splitPair(page.items[0] || page.note || '79|핵심 지표')
+  const num = value.replace(/%$/, '')
   return <div className="layout stat-focus-layout">
     <div className="eyebrow">{page.eyebrow || 'DATA'}</div>
     <h2 className={titleDensity(page.title)}>{withBreaks(page.title)}</h2>
-    <div className="big-stat-wrap"><span className="big-stat-sign">+</span><strong>{value}</strong><i>%</i></div>
+    <div className="big-stat-wrap"><span className="big-stat-sign">+</span><strong>{num}</strong><i>%</i></div>
     <div className="big-stat-label">{label}</div>
     <p className={`lead small ${bodyDensity(page.body)}`}>{page.body}</p>
-    <div className="stat-focus-items" {...grow(page.items.length-1,3)}>{page.items.slice(1,6).map((x,i)=><span key={i}>{x}</span>)}</div>
+    <div className="stat-focus-items" {...grow(page.items.length-1,3)}>{page.items.slice(1,6).map((x,i)=><span key={i}>{x.replace('|',' ')}</span>)}</div>
     {page.note&&<div className="micro-note">{page.note}</div>}
   </div>
 }
@@ -766,9 +767,15 @@ function KeywordScatter({ page }: { page: CardPage }) {
   </div>
 }
 
+/** Newsletter 표지 제목은 128px 로 커서 일반 기준보다 일찍 줄인다 (길면 본문·호수와 겹침) */
+const newsletterDensity = (title: string) => {
+  const n = title.replace(/\s/g, '').length
+  return n > 22 ? 'title-dense' : n > 16 ? 'title-compact' : titleDensity(title)
+}
+
 function CoverNewsletter({ page }: { page: CardPage }) {
   return <div className="layout nlc-layout">
-    <h1 className={titleDensity(page.title)}>{withBreaks(page.title)}<span className="nlc-burst"/></h1>
+    <h1 className={newsletterDensity(page.title)}>{withBreaks(page.title)}<span className="nlc-burst"/></h1>
     {page.body && <p className={`nlc-lead ${bodyDensity(page.body)}`}>{page.body}</p>}
     <div className="nlc-visual">
       {page.imageDataUrl
@@ -830,6 +837,258 @@ function BeforeAfterList({ page }: { page: CardPage }) {
   </div>
 }
 
+/* ---------- 캡처 기반 추가 템플릿: 인포그래픽 10종 (2026-09) ---------- */
+
+/** 제목에서 *강조* 로 감싼 부분만 포인트 색 (<em>). 줄바꿈 유지 */
+const accentTitle = (title: string) => title.split('\n').map((line, i, arr) => <React.Fragment key={i}>
+  {line.split(/(\*[^*\n]+\*)/).map((part, j) => /^\*[^*]+\*$/.test(part) ? <em key={j} data-accent="">{part.slice(1, -1)}</em> : part)}
+  {i < arr.length - 1 && <br/>}
+</React.Fragment>)
+
+/** 인포그래픽 공통 머리: 작은 라벨 · 두 톤 제목 · 부제(알약) — 각각 .layout 직계 자식으로 둔다 */
+function InfoHead({ page, sub = 'pill' }: { page: CardPage; sub?: 'pill' | 'plain' | 'brush' }) {
+  return <>
+    {page.eyebrow && <div className="ig-eyebrow">{page.eyebrow}</div>}
+    <h2 className={`ig-title ${titleDensity(page.title.replace(/\*/g, ''))}`}>{accentTitle(page.title)}</h2>
+    {page.body && <p className={`ig-sub is-${sub}`}>{page.body}</p>}
+  </>
+}
+
+const IgSource = ({ text }: { text: string }) => text ? <div className="ig-source"><FileText size={20}/><span>{text}</span></div> : null
+
+/** 항목에서 '라벨|설명' 뒤의 설명을 줄 목록으로 (줄바꿈·/·, 로 나눔) */
+const linesOf = (text: string) => text.split(/\n|\/|,/).map(v => v.trim()).filter(Boolean)
+
+function StepStack({ page }: { page: CardPage }) {
+  const icons = [FileText, Settings, ChartColumn, Target, Rocket]
+  return <div className="layout ig-layout sst-layout">
+    <InfoHead page={page}/>
+    <div className="sst-list" {...grow(page.items.length, 3)}>{page.items.slice(0, 5).map((item, i, all) => {
+      const [a, b] = splitPair(item); const Icon = icons[i % icons.length]
+      return <React.Fragment key={i}>
+        <div className="sst-card">
+          <span className="sst-icon"><Icon size={64} strokeWidth={1.6}/></span>
+          <div className="sst-copy"><span className="sst-pill">STEP {i + 1}</span><b>{a || item}</b>{b && <p>{b}</p>}</div>
+        </div>
+        {i < all.length - 1 && <span className="sst-arrow"><ChevronDown size={30}/></span>}
+      </React.Fragment>
+    })}</div>
+    <IgSource text={page.note}/>
+  </div>
+}
+
+function NumberedRail({ page }: { page: CardPage }) {
+  const icons = [FileText, Lightbulb, Settings, ChartColumn, Target, Users]
+  return <div className="layout ig-layout nrl-layout">
+    <InfoHead page={page}/>
+    <div className="nrl-list" {...grow(page.items.length, 4)}>{page.items.slice(0, 6).map((item, i) => {
+      const [a, b] = splitPair(item); const Icon = icons[i % icons.length]
+      return <div className="nrl-row" key={i}>
+        <span className="nrl-num">{String(i + 1).padStart(2, '0')}</span>
+        <div className="nrl-card">
+          <span className="nrl-icon"><Icon size={46} strokeWidth={1.6}/></span>
+          <div className="nrl-copy"><b>{a || item}</b>{linesOf(b).map((t, j) => <p key={j}>{t}</p>)}</div>
+        </div>
+      </div>
+    })}</div>
+    <IgSource text={page.note}/>
+  </div>
+}
+
+function VersusList({ page }: { page: CardPage }) {
+  // 'A|항목|내용' / 'B|항목|내용'. 표시가 없으면 앞 절반 A, 뒤 절반 B
+  const sides: [string, string][][] = [[], []]
+  const half = Math.ceil(page.items.length / 2)
+  page.items.slice(0, 12).forEach((item, i) => {
+    const [a, rest] = splitPair(item)
+    const side = /^a$/i.test(a) && rest ? 0 : /^b$/i.test(a) && rest ? 1 : i < half ? 0 : 1
+    sides[side].push(splitPair(/^(a|b)$/i.test(a) && rest ? rest : item) as [string, string])
+  })
+  const heads: [string, typeof Lightbulb][] = [['A안', Lightbulb], ['B안', TrendingUp]]
+  return <div className="layout ig-layout vsl-layout">
+    <InfoHead page={page}/>
+    <div className="vsl-board" {...grow(Math.max(sides[0].length, sides[1].length), 4)}>
+      {sides.map((rows, s) => {
+        const [label, Icon] = heads[s]
+        return <div className={`vsl-col c${s + 1}`} key={s}>
+          <span className="vsl-icon"><Icon size={62} strokeWidth={1.6}/></span>
+          <div className="vsl-label">{label}</div>
+          {rows.slice(0, 6).map(([a, b], i) => <div className="vsl-row" key={i}><span>{String(i + 1).padStart(2, '0')}</span><div><b>{a}</b>{b && <p>{b}</p>}</div></div>)}
+        </div>
+      })}
+      <span className="vsl-vs">VS</span>
+    </div>
+    <IgSource text={page.note}/>
+  </div>
+}
+
+function Pyramid({ page }: { page: CardPage }) {
+  const levels = page.items.slice(0, 5)
+  const n = Math.max(levels.length, 1)
+  const icons = [Award, ChartColumn, Lightbulb, Settings, Target]
+  return <div className="layout ig-layout pyr-layout">
+    <InfoHead page={page} sub="plain"/>
+    <div className="pyr-stage" {...grow(levels.length, 4)}>
+      {levels.map((item, i) => {
+        const [a, rest] = splitPair(item)
+        const [text, point] = splitPair(rest)
+        const top = i / n, bottom = (i + 1) / n
+        const Icon = icons[i % icons.length]
+        return <React.Fragment key={i}>
+          <div className={`pyr-level l${i + 1} ${i < n / 2 ? 'is-dark' : ''}`} style={{
+            top: `${top * 100}%`, height: `calc(${100 / n}% - 12px)`,
+            clipPath: `polygon(${50 - top * 50}% 0, ${50 + top * 50}% 0, ${50 + bottom * 50}% 100%, ${50 - bottom * 50}% 100%)`,
+            ['--shade' as string]: `${92 - i * (60 / n)}%`,
+          }}>
+            <div className="pyr-copy"><span>{i + 1}</span><b>{a || item}</b>{text && <p>{text}</p>}</div>
+          </div>
+          {point && <div className={`pyr-point ${i % 2 ? 'is-left' : 'is-right'}`} style={{ top: `${(top + 0.5 / n) * 100}%` }}>
+            <span><Icon size={30}/></span><div><b>포인트</b><p>{point}</p></div>
+          </div>}
+        </React.Fragment>
+      })}
+    </div>
+    <IgSource text={page.note}/>
+  </div>
+}
+
+/** Cycle Ring: 고리 조각 하나 (화살표 머리·꼬리 파임 포함). 각도는 12시 방향 0, 시계 방향 */
+const ringSegment = (a0: number, a1: number, R: number, r: number, c = 400) => {
+  const pt = (a: number, rad: number) => `${(c + rad * Math.sin(a)).toFixed(1)} ${(c - rad * Math.cos(a)).toFixed(1)}`
+  const tip = 0.09, mid = (R + r) / 2
+  return `M ${pt(a0, R)} A ${R} ${R} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1, R)} L ${pt(a1 + tip, mid)} L ${pt(a1, r)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 0 ${pt(a0, r)} L ${pt(a0 + tip, mid)} Z`
+}
+
+function CycleRing({ page }: { page: CardPage }) {
+  const steps = page.items.slice(0, 6)
+  const n = Math.max(steps.length, 3)
+  const icons = [Lightbulb, FileText, Settings, TrendingUp, Users, Target]
+  const gap = 0.05
+  return <div className="layout ig-layout cyc-layout">
+    <InfoHead page={page}/>
+    <div className="cyc-stage" {...grow(steps.length, 5)}>
+      <svg viewBox="0 0 800 800">{steps.map((_, i) => {
+        const a0 = (i / n) * Math.PI * 2 - Math.PI / n + gap, a1 = ((i + 1) / n) * Math.PI * 2 - Math.PI / n - gap
+        return <path key={i} d={ringSegment(a0, a1, 390, 190)} style={{ fill: `color-mix(in srgb, var(--accent) ${22 + i * (70 / n)}%, var(--paper))` }}/>
+      })}</svg>
+      <div className="cyc-center"><Sprout size={96} strokeWidth={1.4}/>{page.note && <b>{page.note}</b>}</div>
+      {steps.map((item, i) => {
+        const [a, b] = splitPair(item); const Icon = icons[i % icons.length]
+        const ang = (i / n) * Math.PI * 2
+        const isDark = 22 + i * (70 / n) > 55
+        return <div className={`cyc-step ${isDark ? 'is-dark' : ''}`} key={i} style={{ left: `${50 + 36.5 * Math.sin(ang)}%`, top: `${50 - 36.5 * Math.cos(ang)}%` }}>
+          <span><Icon size={40} strokeWidth={1.8}/></span><b>{a || `단계 ${i + 1}`}</b>{linesOf(b).map((t, j) => <p key={j}>{t}</p>)}
+        </div>
+      })}
+    </div>
+  </div>
+}
+
+function StatCards({ page }: { page: CardPage }) {
+  const icons = [TrendingUp, Users, ArrowUpRight, FileText, Target, Award]
+  return <div className="layout ig-layout stc-layout">
+    <InfoHead page={page}/>
+    <div className="stc-grid" {...grow(page.items.length, 4)}>{page.items.slice(0, 6).map((item, i) => {
+      const [value, label] = splitPair(item); const Icon = icons[i % icons.length]
+      const m = value.match(/^([^\d]*[\d.,]+)(.*)$/)
+      return <div className="stc-card" key={i}>
+        <span className="stc-icon"><Icon size={46} strokeWidth={2}/></span>
+        <strong>{m ? m[1] : value}{m && m[2] && <small data-unit="">{m[2]}</small>}</strong>
+        <p>{label || '설명'}</p>
+      </div>
+    })}</div>
+    {page.note && <div className="stc-insight"><Lightbulb size={40}/><b>{page.note}</b></div>}
+  </div>
+}
+
+function CheckTip({ page }: { page: CardPage }) {
+  const icons = [FileText, Lightbulb, TrendingUp, Users, Target, Award, Settings]
+  return <div className="layout ig-layout ckt-layout">
+    <InfoHead page={page}/>
+    <div className="ckt-list" {...grow(page.items.length, 5)}>{page.items.slice(0, 7).map((item, i) => {
+      const [a, b] = splitPair(item); const Icon = icons[i % icons.length]
+      return <div className="ckt-row" key={i}>
+        <span className="ckt-check"><Check size={34} strokeWidth={3.2}/></span>
+        <div className="ckt-copy"><b>{a || item}</b>{b && <p>{b}</p>}</div>
+        <span className="ckt-icon"><Icon size={40} strokeWidth={1.8}/></span>
+      </div>
+    })}</div>
+    {page.note && <div className="ckt-tip"><span className="ckt-badge">TIP</span><p>{page.note}</p></div>}
+  </div>
+}
+
+function QuadrantAxes({ page }: { page: CardPage }) {
+  const icons = [ChartColumn, Star, CircleHelp, Settings]
+  const cells = [0, 1, 2, 3].map(i => splitPair(page.items[i] || `영역 ${i + 1}|내용 입력`))
+  return <div className="layout ig-layout is-left qax-layout">
+    <InfoHead page={page} sub="plain"/>
+    <div className="qax-stage">
+      <div className="qax-area">
+      <span className="qax-axis-y"/><span className="qax-axis-x"/>
+      <span className="qax-tag is-b">기준 B</span><span className="qax-tag is-a">기준 A</span>
+      <span className="qax-end is-top">높음</span><span className="qax-end is-bottom">낮음</span>
+      <span className="qax-end is-left">낮음</span><span className="qax-end is-right">높음</span>
+      {cells.map(([a, b], i) => {
+        const Icon = icons[i]
+        return <div className={`qax-cell q${i + 1}`} key={i}>
+          <span className="qax-icon"><Icon size={40} strokeWidth={2}/></span>
+          <b>{a}</b>
+          <ul>{linesOf(b).slice(0, 4).map((t, j) => <li key={j}>{t}</li>)}</ul>
+        </div>
+      })}
+      </div>
+      {page.note && <div className="qax-callout">{page.note}</div>}
+    </div>
+  </div>
+}
+
+function Faq({ page }: { page: CardPage }) {
+  return <div className="layout ig-layout faq-layout">
+    <div className="faq-bubble"><span>?</span><i/></div>
+    <InfoHead page={page}/>
+    <div className="faq-list" {...grow(page.items.length, 4)}>{page.items.slice(0, 6).map((item, i) => {
+      const [q, a] = splitPair(item)
+      return <div className="faq-card" key={i}>
+        <div className="faq-q"><span>Q{i + 1}</span><b>{q || item}</b></div>
+        <div className="faq-a"><span>A</span><p>{a || '답변 입력'}</p></div>
+      </div>
+    })}</div>
+    <IgSource text={page.note}/>
+  </div>
+}
+
+function ConceptMap({ page }: { page: CardPage }) {
+  // 'S|내용' 또는 '요약|내용' 은 아래 요약 띠로, 나머지는 가운데 주제를 둘러싼 항목
+  const summary: string[] = []
+  const nodes: [string, string][] = []
+  page.items.forEach(item => {
+    const [a, b] = splitPair(item)
+    if (b && /^(s|요약)$/i.test(a)) summary.push(b)
+    else nodes.push([a || item, b])
+  })
+  const shown = nodes.slice(0, 6)
+  const n = Math.max(shown.length, 1)
+  const icons = [FileText, ChartColumn, Settings, Users, Target, Lightbulb]
+  const pos = shown.map((_, i) => {
+    const a = (i / n) * Math.PI * 2
+    return { x: 50 + 34 * Math.sin(a), y: 50 - 34 * Math.cos(a) }
+  })
+  return <div className="layout ig-layout cmp-layout">
+    <InfoHead page={page} sub="brush"/>
+    <div className="cmp-stage" {...grow(shown.length, 5)}>
+      <svg className="cmp-lines" viewBox="0 0 100 100" preserveAspectRatio="none">{pos.map((p, i) => <line key={i} x1="50" y1="50" x2={p.x} y2={p.y}/>)}</svg>
+      <div className="cmp-center"><Lightbulb size={58} strokeWidth={1.5}/><b>{page.note || '핵심 주제'}</b></div>
+      {shown.map(([a, b], i) => {
+        const Icon = icons[i % icons.length]
+        return <div className="cmp-node" key={i} style={{ left: `${pos[i].x}%`, top: `${pos[i].y}%` }}>
+          <span className="cmp-icon"><Icon size={36} strokeWidth={1.8}/></span><b>{a}</b>{b && <p>{b}</p>}
+        </div>
+      })}
+    </div>
+    {summary.length > 0 && <div className="cmp-summary"><div className="cmp-summary-head"><FileText size={34}/><b>요약</b></div><ul>{summary.slice(0, 3).map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
+  </div>
+}
+
 /** 직접 추가한 이미지·텍스트 박스 층 (템플릿·헤더·푸터 위) */
 function FreeLayer({ items }: { items?: FreeItem[] }) {
   if (!items?.length) return null
@@ -846,7 +1105,7 @@ function FreeLayer({ items }: { items?: FreeItem[] }) {
         const Icon = iconMap[item.icon ?? ''] ?? Sparkles
         return <div key={item.id} className="free-item free-icon" data-free-id={item.id} style={{ ...box, height: item.h, color: item.color }}><Icon width="100%" height="100%" strokeWidth={1.75}/></div>
       }
-      const textStyle: React.CSSProperties = { ...box, fontSize: item.fontSize, color: item.color, fontWeight: item.isBold ? 800 : 500, fontFamily: item.fontFamily || undefined, textAlign: item.align, lineHeight: item.lineHeight, background: item.bgColor }
+      const textStyle: React.CSSProperties = { ...box, fontSize: item.fontSize, color: item.color, fontWeight: item.isBold ? 800 : 500, fontFamily: item.fontFamily || undefined, textAlign: item.align, lineHeight: item.lineHeight, background: item.bgColor, height: item.h, alignContent: item.h && item.valign ? { top: 'start', middle: 'center', bottom: 'end' }[item.valign] : undefined }
       return item.html
         ? <div key={item.id} className={`free-item free-text ${item.bgColor ? 'has-bg' : ''}`} data-free-id={item.id} style={textStyle} dangerouslySetInnerHTML={{ __html: sanitizeRich(item.html) }}/>
         : <div key={item.id} className={`free-item free-text ${item.bgColor ? 'has-bg' : ''}`} data-free-id={item.id} style={textStyle}>{item.text}</div>
@@ -931,6 +1190,16 @@ export function CardCanvas({ project, page, pageIndex, exportId }: Props) {
       case 'cover-newsletter': return <CoverNewsletter page={page}/>
       case 'step-detail': return <StepDetail page={page}/>
       case 'before-after-list': return <BeforeAfterList page={page}/>
+      case 'step-stack': return <StepStack page={page}/>
+      case 'numbered-rail': return <NumberedRail page={page}/>
+      case 'versus-list': return <VersusList page={page}/>
+      case 'pyramid': return <Pyramid page={page}/>
+      case 'cycle-ring': return <CycleRing page={page}/>
+      case 'stat-cards': return <StatCards page={page}/>
+      case 'check-tip': return <CheckTip page={page}/>
+      case 'quadrant-axes': return <QuadrantAxes page={page}/>
+      case 'faq': return <Faq page={page}/>
+      case 'concept-map': return <ConceptMap page={page}/>
       default: return <Editorial page={page}/>
     }
   })()

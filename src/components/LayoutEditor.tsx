@@ -39,7 +39,7 @@ interface Props {
 export function LayoutEditor({ canvasId, page, aspect, scale, selectedKey: key, onSelect: setKey, onChange, onFreeChange }: Props) {
   const [base, setBase] = useState<Box | null>(null)
   const [freeH, setFreeH] = useState(0)
-  const resizeStart = useRef({ w: 0, fontSize: 0 })
+  const resizeStart = useRef({ w: 0, h: 0, fontSize: 0 })
   // 모서리 손잡이 = 비율 고정, 변 손잡이 = 너비·높이 따로.
   // 라이브러리의 비율 고정(lockAspectRatio)은 모서리를 옆으로만 끌면 크기가 안 바뀌어서, 비율은 직접 계산한다
   const isCorner = (dir: string) => /^(top|bottom)(Left|Right)$/.test(dir)
@@ -60,7 +60,7 @@ export function LayoutEditor({ canvasId, page, aspect, scale, selectedKey: key, 
   const freeId = freeIdOf(key)
   const free = freeId ? page.freeItems?.find(it => it.id === freeId) : undefined
   // 텍스트는 내용 높이를 재고, 나머지(이미지·도형·아이콘)는 저장된 높이
-  const freeHeight = free?.kind === 'text' ? freeH || 40 : free?.h ?? free?.w ?? 40
+  const freeHeight = free?.kind === 'text' ? free.h ?? (freeH || 40) : free?.h ?? free?.w ?? 40
   const edits = activeEdits(page, aspect)
   const edit = key ? edits[key] ?? { x: 0, y: 0, s: 1 } : null
 
@@ -159,10 +159,14 @@ export function LayoutEditor({ canvasId, page, aspect, scale, selectedKey: key, 
       return { x: r(p.x), y: r(p.y), w: r(p.w), h: r(p.h) }
     }
     if (free && free.kind !== 'text') return { x: r(pos.x), y: r(pos.y), w: r(ref.offsetWidth), h: r(ref.offsetHeight) }
+    // 텍스트 위아래 변: 박스 높이를 정한다 (세로 정렬이 보이게)
+    if (dir === 'top' || dir === 'bottom') return { y: r(pos.y), h: r(ref.offsetHeight) }
     const w = ref.offsetWidth
     const isSide = dir === 'left' || dir === 'right'
-    const fontSize = isSide ? resizeStart.current.fontSize : Math.max(8, Math.round(resizeStart.current.fontSize * w / resizeStart.current.w))
-    return { x: r(pos.x), y: r(pos.y), w: r(w), fontSize }
+    const k = w / resizeStart.current.w
+    const fontSize = isSide ? resizeStart.current.fontSize : Math.max(8, Math.round(resizeStart.current.fontSize * k))
+    const h = free?.h !== undefined && !isSide ? r(resizeStart.current.h * k) : undefined
+    return { x: r(pos.x), y: r(pos.y), w: r(w), fontSize, ...(h !== undefined ? { h } : {}) }
   }
 
   // 스마트 안내선: 끌기 시작할 때 기준선을 모으고, 끄는 동안 가까운 기준선에 붙인다 (Alt 를 누르면 자유 이동)
@@ -261,7 +265,7 @@ export function LayoutEditor({ canvasId, page, aspect, scale, selectedKey: key, 
       position={{ x: free.x, y: free.y }}
       size={{ width: free.w, height: freeHeight }}
       minWidth={40} minHeight={20}
-      enableResizing={{ topLeft: true, topRight: true, bottomLeft: true, bottomRight: true, left: true, right: true, top: free.kind !== 'text', bottom: free.kind !== 'text' }}
+      enableResizing={{ topLeft: true, topRight: true, bottomLeft: true, bottomRight: true, left: true, right: true, top: true, bottom: true }}
       resizeHandleStyles={handleStyles}
       onDragStart={() => startSnap(getFreeEl(free.id))}
       onDrag={(e, d) => {
@@ -273,7 +277,7 @@ export function LayoutEditor({ canvasId, page, aspect, scale, selectedKey: key, 
         const p = dropped(e, { x: d.x, y: d.y, w: free.w, h: freeHeight })
         onFreeChange(free.id, { x: Math.round(p.x), y: Math.round(p.y) })
       }}
-      onResizeStart={() => { resizeStart.current = { w: free.w, fontSize: free.fontSize ?? 40 }; startBox.current = { x: free.x, y: free.y, w: free.w, h: freeHeight } }}
+      onResizeStart={() => { resizeStart.current = { w: free.w, h: free.h ?? freeHeight, fontSize: free.fontSize ?? 40 }; startBox.current = { x: free.x, y: free.y, w: free.w, h: freeHeight } }}
       onResize={(_, dir, ref, __, pos) => previewFree(resized(dir, ref, pos))}
       onResizeStop={(_, dir, ref, __, pos) => onFreeChange(free.id, resized(dir, ref, pos))}
     />}

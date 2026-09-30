@@ -82,6 +82,17 @@ export const templateLibrary: TemplateMeta[] = [
   { id:'step-detail', name:'Step Detail', category:'프로세스', description:'STEP 번호·큰 제목·설명 아래 확인 포인트 카드 3개', hint:'상단 라벨=STEP 01 · 메모=말풍선 · 항목=포인트|설명 3개', visual:'flow' },
   { id:'before-after-list', name:'Before After List', category:'비교', description:'BEFORE·AFTER 박스를 위아래로 놓고 불릿으로 비교', hint:'항목=B|개선 전 내용, A|개선 후 내용 (표시 없으면 앞 절반=BEFORE)', visual:'compare' },
 
+  { id:'step-stack', name:'Step Stack', category:'프로세스', description:'아이콘 원과 STEP 알약이 든 세로 단계 카드와 연결 화살표', hint:'항목=단계 내용|보조 설명 3개(최대 5) · 제목의 *강조* = 포인트 색 · 본문 = 부제 · 메모=출처', visual:'flow' },
+  { id:'numbered-rail', name:'Numbered Rail', category:'프로세스', description:'왼쪽 번호 레일과 말풍선 카드로 이어지는 단계 목록', hint:'항목=제목|설명1 / 설명2 4개(최대 6) · 제목의 *강조* = 포인트 색 · 본문 = 부제 · 메모=출처', visual:'flow' },
+  { id:'versus-list', name:'Versus List', category:'비교', description:'A안·B안 두 열을 VS 로 나눠 번호 항목으로 비교', hint:'항목=A|항목|내용, B|항목|내용 (표시 없으면 앞 절반 A) · 제목의 *강조* = 포인트 색 · 본문 = 부제', visual:'compare' },
+  { id:'pyramid', name:'Pyramid', category:'정보', description:'위에서 아래로 넓어지는 단계 피라미드와 옆 포인트 상자', hint:'항목=단계명|내용|포인트 설명(선택) 4개(최대 5) · 제목의 *강조* = 포인트 색 · 본문 = 부제 · 메모=출처', visual:'matrix' },
+  { id:'cycle-ring', name:'Cycle Ring', category:'프로세스', description:'화살표 조각으로 이어진 순환 고리와 가운데 아이콘', hint:'항목=단계명|내용1 / 내용2 5개(3~6) · 제목의 *강조* = 포인트 색 · 본문 = 부제 · 메모=가운데 글자', visual:'wheel' },
+  { id:'stat-cards', name:'Stat Cards', category:'데이터', description:'아이콘·큰 숫자·단위 카드 2×2와 아래 인사이트 띠', hint:'항목=85%|설명 4개(최대 6, 숫자 뒤 글자는 단위로) · 메모=인사이트', visual:'stats' },
+  { id:'check-tip', name:'Check Tip', category:'정보', description:'체크 원·포인트·오른쪽 아이콘 목록과 아래 TIP 상자', hint:'항목=포인트|설명 5개(최대 7) · 제목의 *강조* = 포인트 색 · 본문 = 부제 · 메모=TIP 문장', visual:'cards' },
+  { id:'quadrant-axes', name:'Quadrant Axes', category:'비교', description:'기준 A·B 두 축으로 나눈 4분면과 영역별 불릿', hint:'항목=영역 이름|내용1, 내용2, 내용3 4개 · 제목 왼쪽 정렬 · 메모=설명 말풍선', visual:'matrix' },
+  { id:'faq', name:'FAQ', category:'정보', description:'Q 알약과 A 줄로 구성한 자주 묻는 질문 카드', hint:'항목=질문|답변 4개(최대 6) · 상단 라벨=자주 묻는 질문 · 제목의 *강조* = 포인트 색 · 본문 = 부제', visual:'quote' },
+  { id:'concept-map', name:'Concept Map', category:'정보', description:'가운데 핵심 주제와 연결선으로 이은 개념 카드, 아래 요약 띠', hint:'항목=항목|내용 5개(3~6), 요약은 S|문장 · 메모=가운데 주제 · 상단 라벨=KEY CONCEPTS', visual:'wheel' },
+
   { id:'save-card', name:'Save Summary', category:'마무리', description:'저장 유도형 핵심 요약과 하단 액션 바', hint:'항목=요약|설명 3~5개 · 메모=저장 문구', visual:'cta' },
 ]
 

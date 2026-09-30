@@ -10,7 +10,7 @@ const labels: Record<Field, string> = { x: 'X', y: 'Y', w: '너비', h: '높이'
  *
  * Props:
  * @param {object} box - 지금 위치·크기 { x, y, w, h } [Required]
- * @param {boolean} isHeightAuto - 높이가 내용에 따라 정해지는 요소(텍스트 박스)면 높이 칸을 잠근다 [Optional, 기본값: false]
+ * @param {boolean} isHeightAuto - 높이가 지금 내용에 따라 정해지는 중이면 칸을 비우고 '자동'으로 표시 (숫자를 넣으면 고정) [Optional, 기본값: false]
  * @param {function} onChange - 바뀐 값만 담아 호출 ({ w: 300 } 등) [Required]
  * @param {function} onReset - 크기를 원래대로 (없으면 버튼 숨김) [Optional]
  *
@@ -28,13 +28,14 @@ export function SizeFields({ box, isHeightAuto = false, onChange, onReset }: {
   const key = `${shown.x}|${shown.y}|${shown.w}|${shown.h}`
 
   // 바깥에서 값이 바뀌면(드래그·방향키·되돌리기) 칸도 따라간다
-  useEffect(() => setDraft({ x: String(shown.x), y: String(shown.y), w: String(shown.w), h: String(shown.h) }), [key])
+  useEffect(() => setDraft({ x: String(shown.x), y: String(shown.y), w: String(shown.w), h: isHeightAuto ? '' : String(shown.h) }), [key, isHeightAuto])
 
   const apply = (field: Field) => {
     const v = Number(draft[field])
     const isSize = field === 'w' || field === 'h'
-    if (!Number.isFinite(v) || (isSize && v < 1) || v === shown[field]) {
-      setDraft(d => ({ ...d, [field]: String(shown[field]) }))
+    const isEmptyAuto = field === 'h' && isHeightAuto && draft.h === ''
+    if (isEmptyAuto || !Number.isFinite(v) || (isSize && v < 1) || (v === shown[field] && !(field === 'h' && isHeightAuto))) {
+      setDraft(d => ({ ...d, [field]: field === 'h' && isHeightAuto ? '' : String(shown[field]) }))
       return
     }
     onChange({ [field]: v })
@@ -45,8 +46,7 @@ export function SizeFields({ box, isHeightAuto = false, onChange, onReset }: {
     <div className="size-fields">
       {(['x', 'y', 'w', 'h'] as Field[]).map(field => <label key={field} className="size-field">
         <span>{labels[field]}</span>
-        <input type="number" value={field === 'h' && isHeightAuto ? '' : draft[field]} placeholder={field === 'h' && isHeightAuto ? '자동' : ''}
-          disabled={field === 'h' && isHeightAuto}
+        <input type="number" value={draft[field]} placeholder={field === 'h' && isHeightAuto ? '자동' : ''}
           onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
           onBlur={() => apply(field)}
           onKeyDown={e => { if (e.key === 'Enter') apply(field) }}/>

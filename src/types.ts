@@ -59,6 +59,17 @@ export type TemplateId =
   | 'cover-newsletter'
   | 'step-detail'
   | 'before-after-list'
+  // 캡처 기반 인포그래픽 10종 (2026-09)
+  | 'step-stack'
+  | 'numbered-rail'
+  | 'versus-list'
+  | 'pyramid'
+  | 'cycle-ring'
+  | 'stat-cards'
+  | 'check-tip'
+  | 'quadrant-axes'
+  | 'faq'
+  | 'concept-map'
 
 export type ThemeId =
   | 'purple' | 'teal' | 'binder' | 'browser' | 'mono'
@@ -92,6 +103,8 @@ export interface LayoutEdit {
   h?: number
   /** 문단 정렬·줄간격 (요소와 그 안의 글자 전체) */
   align?: 'left' | 'center' | 'right'
+  /** 박스 안 세로 정렬 (박스가 글자보다 높을 때 보임) */
+  valign?: 'top' | 'middle' | 'bottom'
   lh?: number
   /**
    * 부분 서식: 글자만 든 요소의 표시 내용을 서식 HTML 로 바꿔 보여준다 (그릴 때 sanitizeRich 로 정리).
@@ -115,7 +128,7 @@ export interface FreeItem {
   x: number
   y: number
   w: number
-  /** 높이 (텍스트는 내용에 따라 자동) */
+  /** 높이 (텍스트는 없으면 내용에 따라 자동) */
   h?: number
   src?: string
   text?: string
@@ -128,6 +141,8 @@ export interface FreeItem {
   color?: string
   isBold?: boolean
   align?: 'left' | 'center' | 'right'
+  /** 박스 안 세로 정렬 (텍스트 박스 높이 h 를 정했을 때 보임) */
+  valign?: 'top' | 'middle' | 'bottom'
   lineHeight?: number
   /** 텍스트 하이라이트 배경색 */
   bgColor?: string

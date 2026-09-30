@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState } from 'react'
-import { AlignCenter, AlignLeft, AlignRight, ArrowUpLeft, Minus, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart, ArrowUpLeft, Minus, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { AspectId, CardPage, FreeItem, LayoutEdit } from '../types'
-import { activeEdits, Box, editableChildren, isTextLeaf, layoutOf, leafText, resizedEdit, resolveKey, visualBox, withEdit } from '../lib/layoutEdits'
+import { activeEdits, Box, editableChildren, isInlinePart, isTextLeaf, layoutOf, leafText, resizedEdit, resolveKey, visualBox, withEdit } from '../lib/layoutEdits'
 import { textSlots } from '../lib/textEdits'
 import { AlignBar, AlignDir } from './AlignBar'
 import { SizeFields } from './SizeFields'
@@ -94,7 +94,7 @@ export function ElementPanel({ canvasId, page, aspect, elementKey, onSelect, onC
    * 글자만 든 요소(부분 서식 가능)의 정보: 원래 글자(src), 서식 없는 HTML(plainHtml), 편집기에 넘길 모양(editorItem),
    * 원고가 바뀌어 저장된 부분 서식이 안 맞는지(isStale). 글자만 든 요소가 아니면 null
    */
-  const [leaf, setLeaf] = useState<{ src: string; plainHtml: string; isStale: boolean; editorItem: FreeItem } | null>(null)
+  const [leaf, setLeaf] = useState<{ src: string; plainHtml: string; isStale: boolean; accent: string; editorItem: FreeItem } | null>(null)
   /** 줄간격 칸에 보여줄 지금 값 (지정하지 않았으면 템플릿 원래 값) */
   const [baseLh, setBaseLh] = useState(1.4)
   /** 지금 보이는 위치·크기 (px, 카드 1080 기준) */
@@ -133,13 +133,18 @@ export function ElementPanel({ canvasId, page, aspect, elementKey, onSelect, onC
     if (!edit?.lh) setBaseLh(lh)
     if (!isTextLeaf(el)) { setLeaf(null); return }
     // 줄바꿈(<br>)까지 살린 원래 글자
-    const lines = Array.from(el.childNodes).map(n => n.nodeType === Node.TEXT_NODE ? n.textContent ?? '' : (n as Element).tagName === 'BR' ? '\n' : '').join('')
+    const nodes = Array.from(el.childNodes).filter(n => !(n instanceof HTMLElement && n.dataset.richContent !== undefined))
+    const lines = nodes.map(n => n.nodeType === Node.TEXT_NODE || isInlinePart(n) ? n.textContent ?? '' : (n as Element).tagName === 'BR' ? '\n' : '').join('')
     const src = leafText(el)
-    const plainHtml = textToHtml(lines)
+    // 섞인 서식 조각은 같은 모양의 서식으로 편집기에 넣는다: *강조* = 포인트 색(테마를 따라가도록 var), 단위 = 원래 크기
+    const partStyle = (n: HTMLElement) => n.dataset.accent !== undefined ? 'color:var(--accent)' : `font-size:${getComputedStyle(n).fontSize}`
+    const plainHtml = nodes.map(n => isInlinePart(n) ? `<span style="${partStyle(n)}">${textToHtml(n.textContent ?? '')}</span>`
+      : n.nodeType === Node.TEXT_NODE ? textToHtml(n.textContent ?? '') : (n as Element).tagName === 'BR' ? '<br>' : '').join('')
     const isStale = !!edit?.rich && edit.richSrc !== src
     const rgb = cs.color.match(/\d+/g)
     setLeaf({
       src, plainHtml, isStale,
+      accent: canvas ? getComputedStyle(canvas).getPropertyValue('--accent') : '',
       editorItem: {
         id: elementKey, kind: 'text', x: 0, y: 0, w: Math.max(40, el.offsetWidth),
         html: edit?.rich && !isStale ? edit.rich : plainHtml, text: lines,
@@ -226,12 +231,18 @@ export function ElementPanel({ canvasId, page, aspect, elementKey, onSelect, onC
           <option value="800">굵게</option>
           <option value="500">보통</option>
         </select>
-        <button onClick={() => setStyle({ color: undefined, font: undefined, weight: undefined, align: undefined, lh: undefined })} disabled={!edit?.color && !edit?.font && !edit?.weight && !edit?.align && !edit?.lh} title="글자 모양 원래대로"><RotateCcw size={15}/></button>
+        <button onClick={() => setStyle({ color: undefined, font: undefined, weight: undefined, align: undefined, valign: undefined, lh: undefined })} disabled={!edit?.color && !edit?.font && !edit?.weight && !edit?.align && !edit?.valign && !edit?.lh} title="글자 모양 원래대로"><RotateCcw size={15}/></button>
       </div>
       <div className="style-row is-para">
+        <div className="align-pair">
         <div className="segmented">
           {([['left', AlignLeft, '왼쪽'], ['center', AlignCenter, '가운데'], ['right', AlignRight, '오른쪽']] as const).map(([value, Icon, label]) =>
             <button key={value} className={edit?.align === value ? 'active' : ''} onClick={() => setStyle({ align: edit?.align === value ? undefined : value })} title={`문단 ${label} 정렬`}><Icon size={16}/></button>)}
+        </div>
+        <div className="segmented">
+          {([['top', AlignVerticalJustifyStart, '위'], ['middle', AlignVerticalJustifyCenter, '가운데'], ['bottom', AlignVerticalJustifyEnd, '아래']] as const).map(([value, Icon, label]) =>
+            <button key={value} className={edit?.valign === value ? 'active' : ''} onClick={() => setStyle({ valign: edit?.valign === value ? undefined : value })} title={`세로 ${label} 정렬`}><Icon size={16}/></button>)}
+        </div>
         </div>
         <div className="font-stepper" title="줄간격">
           <button onClick={() => setStyle({ lh: Math.max(0.8, Math.round(((edit?.lh ?? baseLh) - 0.1) * 10) / 10) })}><Minus size={15}/></button>
@@ -244,7 +255,7 @@ export function ElementPanel({ canvasId, page, aspect, elementKey, onSelect, onC
       ? <>
         {leaf.isStale && <div className="stale-note">원고 글자가 바뀌어 저장된 부분 서식이 적용되지 않았어요.
           <button onClick={() => setStyle({ rich: undefined, richSrc: undefined })}>부분 서식 지우기</button></div>}
-        <RichTextEditor item={leaf.editorItem} onChange={setRich}/>
+        <div style={{ ['--accent' as string]: leaf.accent }}><RichTextEditor item={leaf.editorItem} onChange={setRich}/></div>
         {edit?.rich && !leaf.isStale && <button className="wide secondary" onClick={() => setStyle({ rich: undefined, richSrc: undefined })}>부분 서식 지우고 원고 글자로</button>}
         <p className="panel-hint">여기서 고친 글자·서식은 카드에만 보이고 원고 칸은 그대로예요. 원고 칸을 고치면 부분 서식은 다시 해야 해요.</p>
       </>

@@ -1,4 +1,4 @@
-import { AlignCenter, AlignLeft, AlignRight, ArrowDownToLine, ArrowUpToLine, CopyPlus, Minus, Plus, Trash2 } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart, ArrowDownToLine, ArrowUpToLine, CopyPlus, Minus, Plus, Trash2 } from 'lucide-react'
 import { FreeItem } from '../types'
 import { AlignBar, AlignDir } from './AlignBar'
 import { SizeFields } from './SizeFields'
@@ -46,8 +46,9 @@ export function FreeItemPanel({ item, themeText, themeAccent, onChange, onAlign,
     <div className="section-head"><h3>선택한 요소</h3><span className="badge">{kindLabel[item.kind]}</span></div>
     <p className="panel-hint">끌어서 이동 · 모서리로 크기 조절{isText ? ' (글자도 함께) · 좌우 가장자리로 폭만' : ''} · Ctrl+C/V 복사 · Delete 삭제</p>
 
-    <SizeFields box={{ x: item.x, y: item.y, w: item.w, h: item.h ?? item.w }} isHeightAuto={isText}
-      onChange={p => onChange(Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v as number)])))}/>
+    <SizeFields box={{ x: item.x, y: item.y, w: item.w, h: item.h ?? item.w }} isHeightAuto={isText && item.h === undefined}
+      onChange={p => onChange(Object.fromEntries(Object.entries(p).map(([k, v]) => [k, Math.round(v as number)])))}
+      onReset={isText && item.h !== undefined ? () => onChange({ h: undefined }) : undefined}/>
 
     {isText && <>
       <RichTextEditor item={item} onChange={onChange}/>
@@ -73,10 +74,16 @@ export function FreeItemPanel({ item, themeText, themeAccent, onChange, onAlign,
         </div>
       </div>
       <div className="field-group">
-        문단 정렬
+        문단 정렬 <span className="hint">가로 · 세로{item.h === undefined ? ' (세로는 높이를 정하면 보여요: 위아래 변 끌기·높이 입력)' : ''}</span>
+        <div className="align-pair">
         <div className="segmented">
           {([['left', AlignLeft, '왼쪽'], ['center', AlignCenter, '가운데'], ['right', AlignRight, '오른쪽']] as const).map(([value, Icon, label]) =>
             <button key={value} className={(item.align ?? 'left') === value ? 'active' : ''} onClick={() => onChange({ align: value })} title={label}><Icon size={16}/></button>)}
+        </div>
+        <div className="segmented">
+          {([['top', AlignVerticalJustifyStart, '위'], ['middle', AlignVerticalJustifyCenter, '가운데'], ['bottom', AlignVerticalJustifyEnd, '아래']] as const).map(([value, Icon, label]) =>
+            <button key={value} className={(item.valign ?? 'top') === value ? 'active' : ''} onClick={() => onChange({ valign: value })} title={`세로 ${label} 정렬`}><Icon size={16}/></button>)}
+        </div>
         </div>
       </div>
       <div className="two-col">

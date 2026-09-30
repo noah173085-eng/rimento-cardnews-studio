@@ -30,6 +30,7 @@ export function sanitizeEdits(value: unknown): PageLayoutEdits | undefined {
       if (e.weight === 500 || e.weight === 800) items[key].weight = e.weight
       if (Number.isFinite(e.w) && (e.w as number) > 0 && (e.w as number) < 3000) items[key].w = e.w
       if (e.align === 'left' || e.align === 'center' || e.align === 'right') items[key].align = e.align
+      if (e.valign === 'top' || e.valign === 'middle' || e.valign === 'bottom') items[key].valign = e.valign
       if (Number.isFinite(e.lh) && (e.lh as number) >= 0.6 && (e.lh as number) <= 3) items[key].lh = e.lh
       if (typeof e.rich === 'string' && typeof e.richSrc === 'string') { items[key].rich = e.rich; items[key].richSrc = e.richSrc }
       if (Number.isFinite(e.h) && (e.h as number) > 0 && (e.h as number) < 3000) items[key].h = e.h
@@ -57,9 +58,10 @@ export function withEdit(page: CardPage, aspect: AspectId, key: string, patch: P
   if (e.w && e.w > 0) clean.w = Math.max(8, Math.round(e.w))
   if (e.h && e.h > 0) clean.h = Math.max(8, Math.round(e.h))
   if (e.align) clean.align = e.align
+  if (e.valign) clean.valign = e.valign
   if (e.lh) clean.lh = Math.round(e.lh * 100) / 100
   if (e.rich && e.richSrc !== undefined) { clean.rich = e.rich; clean.richSrc = e.richSrc }
-  const hasStyle = clean.f || clean.hide || clean.color || clean.font || clean.weight || clean.icons || clean.w || clean.h || clean.align || clean.lh || clean.rich
+  const hasStyle = clean.f || clean.hide || clean.color || clean.font || clean.weight || clean.icons || clean.w || clean.h || clean.align || clean.valign || clean.lh || clean.rich
   if (Math.abs(clean.x) < 0.5 && Math.abs(clean.y) < 0.5 && clean.s === 1 && !hasStyle) delete items[key]
   else items[key] = clean
   return Object.keys(items).length ? { template: page.template, aspect, items } : undefined
@@ -182,25 +184,32 @@ function scaleFont(el: HTMLElement, f: number) {
 /**
  * 항목을 원래 디자인 개수보다 늘린 컨테이너([data-extended])가 카드 아래로 넘치면 CSS zoom 으로 5%씩 줄인다 (최소 60%).
  * 넘침 판단: .layout 의 흐름 안 자식 아래 끝이 안쪽 여백선을 넘거나, 컨테이너 조상 중 높이가 정해진 상자가 넘칠 때.
- * zoom 을 건 요소의 offsetHeight 는 줄기 전 값이 나오므로 직접 곱한다. 원래 개수 이하 페이지는 건드리지 않는다.
+ * 넘치지 않는 페이지는 건드리지 않는다.
  */
 export function fitExtended(layout: Element) {
   layout.querySelectorAll<HTMLElement>('[data-fit]').forEach(el => { el.style.zoom = ''; delete el.dataset.fit })
-  const targets = Array.from(layout.querySelectorAll<HTMLElement>('[data-extended]'))
+  // 늘린 컨테이너가 있으면 그것만, 없으면(원고가 길어 기본 개수에서도 넘칠 때) 반복 컨테이너를 줄인다
+  const extended = Array.from(layout.querySelectorAll<HTMLElement>('[data-extended]'))
+  const targets = extended.length ? extended : Array.from(layout.querySelectorAll<HTMLElement>('[data-grow]'))
   if (!targets.length || !(layout instanceof HTMLElement)) return
   const overflows = () => {
     const limit = layout.clientHeight - parseFloat(getComputedStyle(layout).paddingBottom)
+    // zoom 을 건 요소의 offsetTop 은 브라우저마다 단위가 달라(Chrome 128+ 는 zoom 으로 나눈 값) 화면 위치로 잰다. k = 미리보기 축소 배율
+    const box = layout.getBoundingClientRect()
+    const k = box.height / layout.offsetHeight || 1
     for (const child of Array.from(layout.children) as HTMLElement[]) {
       if (/absolute|fixed/.test(getComputedStyle(child).position)) continue
-      if (child.offsetTop + child.offsetHeight * (parseFloat(child.style.zoom) || 1) > limit + 1) return true
+      if ((child.getBoundingClientRect().bottom - box.top) / k > limit + 1) return true
     }
     return targets.some(t => {
       for (let a = t.parentElement; a && a !== layout; a = a.parentElement) if (a.scrollHeight > a.clientHeight + 1) return true
       return false
     })
   }
+  // CSS 에 이미 zoom 이 있으면(1:1 규격 등) 그 값에 곱한다 (덮어쓰면 오히려 커짐)
+  const base = targets.map(t => parseFloat(getComputedStyle(t).zoom) || 1)
   for (let z = 0.95; z >= 0.6 && overflows(); z -= 0.05) {
-    targets.forEach(t => { t.style.zoom = z.toFixed(2); t.dataset.fit = '' })
+    targets.forEach((t, i) => { t.style.zoom = (base[i] * z).toFixed(3); t.dataset.fit = '' })
   }
 }
 
@@ -238,12 +247,33 @@ function restoreBoxSizes(nodes: HTMLElement[]) {
   }
 }
 
+/**
+ * 박스 안 세로 정렬. 박스 표시 방식을 바꾸지 않고 정렬 속성만 쓴다
+ * (세로 flex = justify-content, 가로 flex = align-items, grid·일반 블록 = align-content).
+ */
+function valignBox(el: HTMLElement, valign: NonNullable<LayoutEdit['valign']>) {
+  const cs = getComputedStyle(el)
+  const saved = el.dataset.tstyle ? JSON.parse(el.dataset.tstyle) : { c: el.style.color, f: el.style.fontFamily, w: el.style.fontWeight, a: el.style.textAlign, l: el.style.lineHeight }
+  el.dataset.tstyle = JSON.stringify({ ...saved, ac: el.style.alignContent, jc: el.style.justifyContent, ai: el.style.alignItems })
+  const flex = { top: 'flex-start', middle: 'center', bottom: 'flex-end' }[valign]
+  const block = { top: 'start', middle: 'center', bottom: 'end' }[valign]
+  if (cs.display.includes('flex')) {
+    if (cs.flexDirection.startsWith('column')) el.style.justifyContent = flex
+    else el.style.alignItems = flex
+  } else el.style.alignContent = block
+}
+
 /** 글자만 들어 있는 요소인지 (글자·줄바꿈만, 다른 태그 없음) — 부분 서식은 이런 요소에만 적용 */
+/** 글자 요소 안에 섞인 서식 조각: 제목의 *강조*(data-accent) · 숫자 뒤 단위(data-unit). 부분 서식 편집에서 글자로 취급한다 */
+export const isInlinePart = (n: Node): n is HTMLElement =>
+  n instanceof HTMLElement && (n.dataset.accent !== undefined || n.dataset.unit !== undefined) && n.children.length === 0
+
 export function isTextLeaf(el: Element) {
   let hasText = false
   for (const n of Array.from(el.childNodes)) {
     if (n.nodeType === Node.TEXT_NODE) { if (n.textContent?.trim()) hasText = true; continue }
     if (n instanceof HTMLElement && (n.tagName === 'BR' || n.dataset.richContent !== undefined)) continue
+    if (isInlinePart(n)) { if (n.textContent?.trim()) hasText = true; continue }
     return false
   }
   return hasText
@@ -251,7 +281,9 @@ export function isTextLeaf(el: Element) {
 
 /** 부분 서식을 넣기 전의 원래 글자 (부분 서식 노드 제외) */
 export function leafText(el: Element) {
-  return Array.from(el.childNodes).filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent ?? '').join('')
+  return Array.from(el.childNodes)
+    .filter(n => n.nodeType === Node.TEXT_NODE || isInlinePart(n))
+    .map(n => n.textContent ?? '').join('')
 }
 
 /** 부분 서식 되돌리기: 넣은 노드를 지우고 원래 글자 크기로 */
@@ -282,7 +314,8 @@ function applyRich(el: HTMLElement, edit: LayoutEdit) {
 function restoreTextStyles(nodes: HTMLElement[]) {
   for (const n of nodes) {
     if (n.dataset.tstyle === undefined) continue
-    const o = JSON.parse(n.dataset.tstyle) as { c: string; f: string; w: string; a: string; l: string }
+    const o = JSON.parse(n.dataset.tstyle) as { c: string; f: string; w: string; a: string; l: string; ac?: string; jc?: string; ai?: string }
+    if (o.ac !== undefined) { n.style.alignContent = o.ac; n.style.justifyContent = o.jc ?? ''; n.style.alignItems = o.ai ?? '' }
     n.style.color = o.c
     n.style.fontFamily = o.f
     n.style.fontWeight = o.w
@@ -297,7 +330,8 @@ function restoreTextStyles(nodes: HTMLElement[]) {
  * 부분만 바꾸려면 더블클릭으로 안쪽 요소를 골라 따로 지정한다 (바깥 요소부터 적용되므로 안쪽 지정이 이긴다).
  */
 function styleText(el: HTMLElement, edit: LayoutEdit) {
-  if (!edit.color && !edit.font && !edit.weight && !edit.align && !edit.lh) return
+  if (!edit.color && !edit.font && !edit.weight && !edit.align && !edit.lh && !edit.valign) return
+  if (edit.valign) valignBox(el, edit.valign)
   for (const n of [el, ...htmlNodes(el)]) {
     if (n !== el && n.closest('[data-rich-content]')) continue // 부분 서식으로 따로 지정한 색·글꼴은 지킨다
     if (n.dataset.tstyle === undefined) n.dataset.tstyle = JSON.stringify({ c: n.style.color, f: n.style.fontFamily, w: n.style.fontWeight, a: n.style.textAlign, l: n.style.lineHeight })
